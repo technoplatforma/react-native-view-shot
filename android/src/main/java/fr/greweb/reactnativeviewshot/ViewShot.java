@@ -6,6 +6,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.Point;
 import android.net.Uri;
 import androidx.annotation.IntDef;
@@ -42,6 +43,7 @@ import java.util.zip.Deflater;
 
 import javax.annotation.Nullable;
 
+import static android.view.View.GONE;
 import static android.view.View.VISIBLE;
 
 /**
@@ -347,31 +349,7 @@ public class ViewShot implements UIBlock {
         view.draw(c);
 
         //after view is drawn, go through children
-        final List<View> childrenList = getAllChildren(view);
-
-        for (final View child : childrenList) {
-            // skip any child that we don't know how to process
-            if (!(child instanceof TextureView)) continue;
-
-            // skip all invisible to user child views
-            if (child.getVisibility() != VISIBLE) continue;
-
-            final TextureView tvChild = (TextureView) child;
-            tvChild.setOpaque(false); // <-- switch off background fill
-
-            // NOTE (olku): get re-usable bitmap. TextureView should use bitmaps with matching size,
-            // otherwise content of the TextureView will be scaled to provided bitmap dimensions
-            final Bitmap childBitmapBuffer = tvChild.getBitmap(getExactBitmapForScreenshot(child.getWidth(), child.getHeight()));
-
-            final int countCanvasSave = c.save();
-            applyTransformations(c, view, child);
-
-            // due to re-use of bitmaps for screenshot, we can get bitmap that is bigger in size than requested
-            c.drawBitmap(childBitmapBuffer, 0, 0, paint);
-
-            c.restoreToCount(countCanvasSave);
-            recycleBitmap(childBitmapBuffer);
-        }
+        drawTextureViews(getAllChildren(view), view, c, paint);
 
         if (width != null && height != null && (width != w || height != h)) {
             final Bitmap scaledBitmap = Bitmap.createScaledBitmap(bitmap, width, height, true);
@@ -395,6 +373,99 @@ public class ViewShot implements UIBlock {
         recycleBitmap(bitmap);
 
         return resolution; // return image width and height
+    }
+
+    private void drawTextureViews(List<View> childrenList, View view, Canvas c, Paint paint) {
+        for (final View child : childrenList) {
+            // skip any child that we don't know how to process
+            if (!(child instanceof TextureView)) continue;
+
+            // skip all invisible to user child views
+            if (child.getVisibility() != VISIBLE) continue;
+
+            final TextureView tvChild = (TextureView) child;
+            tvChild.setOpaque(false); // <-- switch off background fill
+
+            // NOTE (olku): get re-usable bitmap. TextureView should use bitmaps with matching size,
+            // otherwise content of the TextureView will be scaled to provided bitmap dimensions
+            final Bitmap childBitmapBuffer = tvChild.getBitmap(getExactBitmapForScreenshot(child.getWidth(), child.getHeight()));
+
+            final int countCanvasSave = c.save();
+            applyTransformations(c, view, child);
+            CharSequence childContentDescription = child.getContentDescription();
+            if (childContentDescription != null && childContentDescription.equals("speaker-video-view")) {
+                int circleW = childBitmapBuffer.getWidth();
+                int borderW = circleW / 40;
+                int diameter = circleW - borderW * 2;
+                final Path path = new Path();
+                path.addCircle(
+                        childBitmapBuffer.getWidth() / 2F,
+                        diameter / 2F + borderW,
+                        diameter / 2F,
+                        Path.Direction.CCW
+                );
+                final int cnt = c.save();
+                c.clipPath(path);
+                c.drawBitmap(childBitmapBuffer, 0, 0, null);
+                c.restoreToCount(cnt);
+                drawSpeakerOverlay(tvChild, childrenList, view, c, paint);
+            } else {
+                // due to re-use of bitmaps for screenshot, we can get bitmap that is bigger in size than requested
+                c.drawBitmap(childBitmapBuffer, 0, 0, paint);
+            }
+            c.restoreToCount(countCanvasSave);
+            recycleBitmap(childBitmapBuffer);
+        }
+    }
+
+    private void drawSpeakerOverlay(
+            TextureView textureView,
+            List<View> childrenList,
+            View view,
+            Canvas c,
+            Paint paint
+    ) {
+        ViewGroup overlay = (ViewGroup) findParentByContentDescription(
+                "speaker-view",
+                textureView
+        );
+        if (overlay == null) return;
+        if (overlay.getVisibility() != VISIBLE) return;
+        @Nullable
+        View avatar = null;
+        if (overlay.getChildCount() > 0)
+            for (int i = 0; i < overlay.getChildCount(); i++) {
+                View overlayChild = overlay.getChildAt(i);
+                CharSequence contentDescription = overlayChild.getContentDescription();
+                if (contentDescription == null) continue;
+                if (contentDescription.equals("avatar-view")) {
+                    avatar = overlayChild;
+                    break;
+                }
+            }
+        int avatarVisibility = VISIBLE;
+        if (avatar != null) {
+            avatarVisibility = avatar.getVisibility();
+            avatar.setVisibility(GONE);
+        }
+        int textureViewVisibility = textureView.getVisibility();
+        textureView.setVisibility(GONE);
+        overlay.draw(c);
+        textureView.setVisibility(textureViewVisibility);
+        if (avatar != null) {
+            avatar.setVisibility(avatarVisibility);
+        }
+    }
+
+    @Nullable
+    private View findParentByContentDescription(String contentDescription, View child) {
+        @Nullable
+        View pointer = child;
+        while (pointer != null) {
+            if (pointer.getContentDescription().equals(contentDescription)) return pointer;
+            pointer = (View) pointer.getParent();
+        }
+        return null;
     }
 
     /**
