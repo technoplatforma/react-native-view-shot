@@ -349,7 +349,7 @@ public class ViewShot implements UIBlock {
         view.draw(c);
 
         //after view is drawn, go through children
-        drawTextureViews(getAllChildren(view), view, c, paint);
+        //drawTextureViews(getAllChildren(view), view, c, paint);
 
         if (width != null && height != null && (width != w || height != h)) {
             final Bitmap scaledBitmap = Bitmap.createScaledBitmap(bitmap, width, height, true);
