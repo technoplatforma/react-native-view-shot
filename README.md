@@ -1,5 +1,9 @@
 # react-native-view-shot ![](https://img.shields.io/npm/v/react-native-view-shot.svg) ![](https://img.shields.io/badge/react--native-%2040+-05F561.svg)
 
+First fork: https://github.com/gre/react-native-view-shot
+
+Second fork: https://github.com/Connect-Club/react-native-view-shot#v3.1.202
+
 Capture a React Native view to an image.
 
 <img src="./.readme/recursive.gif" width=300 />
